@@ -17,7 +17,7 @@
 
         const passcode = document.getElementById('passcode').value
 
-        const response = await fetch('/stream/', {
+        const response = await fetch('/logs/stream', {
           method: 'GET',
           headers: {
             'Authorization': 'Bearer ' + passcode
