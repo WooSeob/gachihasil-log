@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Render, StreamableFile, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Param,
+  Render,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import { AppService } from './app.service';
 import QueryLogDto from './dto/QueryLogDto';
 import { BasicAuthGuard } from './basic.guard';
