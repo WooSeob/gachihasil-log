@@ -63,15 +63,51 @@
       <label for="passcode" class="defaultText">비밀번호</label>
       <input type="number" id="passcode">
       <button type="button" id="queryToday">오늘 로그 조회</button>
+
+      <input type="checkbox" id="onlyResponseLog">
+      <label for="onlyResponseLog" class="defaultText">리스폰스 로그만 보기</label>
+
+      <input type="checkbox" id="showMetadataObj" checked>
+      <label for="showMetadataObj" class="defaultText">오브젝트 보이기</label>
     </form>
     <div id="log-container"></div>
 
     <script>
+      class LogRepository {
+        _container = []
+        _pushCallback;
+        _removeCallback;
+        _ttl;
+        _expiresAt;
+        constructor(pushCallback, removeCallback, ttlMilli) {
+          this._pushCallback = pushCallback;
+          this._removeCallback = removeCallback;
+          this._ttl = ttlMilli
+        }
+        push(e) {
+          this._container.push(e)
+          this._pushCallback(e)
+          this._expiresAt = Date.now() + this._ttl;
+        }
+        getAll() {
+          return this._container;
+        }
+        hasLogs() {
+          return this._container && Date.now() < this._expiresAt;
+        }
+      }
+
+      const container = document.getElementById('log-container');
       document.getElementById('queryToday').addEventListener('click', async () => {
+
+        if (logRepository.hasLogs()) {
+          console.log("캐시된 로그 목록 재사용")
+          return;
+        }
 
         const passcode = document.getElementById('passcode').value
 
-        const response = await fetch('/logs/stream', {
+        const response = await fetch('/stream', {
           method: 'GET',
           headers: {
             'Authorization': 'Bearer ' + passcode
@@ -84,15 +120,65 @@
           return;
         }
 
-        const container = document.getElementById('log-container');
         container.replaceChildren()
-
 
         const reader = response.body.getReader();
         for await (let line of makeTextFileLineIterator(reader)) {
-          container.appendChild(getElement(line));
+          logRepository.push(JSON.parse(line))
         }
       });
+
+      const filterOnlyResponseLog = (l) => l.context === 'ResponseLogger'
+      const filterShowAllLog = () => true;
+
+      const showAllMetadataResolver = (val) => JSON.stringify(val)
+      const hideMetadataResolver = (val) => val;
+
+      const checkOnlyResponseLog = document.getElementById('onlyResponseLog')
+      const checkShowMetadata = document.getElementById('showMetadataObj')
+
+      let selectedFilter;
+      let selectedMetadataResolver;
+
+      function updateOnlyResponseLogChecked() {
+        selectedFilter = checkOnlyResponseLog.checked ?
+          filterOnlyResponseLog :
+          filterShowAllLog;
+      }
+
+      function updateShowMetadataChecked() {
+        selectedMetadataResolver = checkShowMetadata.checked ?
+          showAllMetadataResolver :
+          hideMetadataResolver;
+      }
+
+      updateOnlyResponseLogChecked();
+      updateShowMetadataChecked();
+
+      const logRepository = new LogRepository((e) => {
+        if (!selectedFilter(e)) {
+          return;
+        }
+        container.appendChild(getElement(e));
+      }, () => {}, 7000)
+
+      checkOnlyResponseLog.addEventListener('click', (e) => {
+        updateOnlyResponseLogChecked()
+        refreshAllLogs()
+      })
+
+      checkShowMetadata.addEventListener('click', (e) => {
+        updateShowMetadataChecked()
+        refreshAllLogs()
+      })
+
+      function refreshAllLogs() {
+        container.replaceChildren()
+        logRepository.getAll()
+          .filter(selectedFilter)
+          .forEach(resLog => container.appendChild(getElement(resLog))
+          )
+      }
 
       async function* makeTextFileLineIterator(reader) {
         const utf8Decoder = new TextDecoder('utf-8');
@@ -124,7 +210,7 @@
         }
       }
 
-      function getElement(rawString) {
+      function getElement(line) {
         function setHoverEvent(container) {
           // This handler will be executed every time the cursor
           // is moved over a different list item
@@ -180,10 +266,9 @@
           context: (val) => val,
           level: (val) => val,
           message: (val) => val,
-          metadata: (val) => JSON.stringify(val)
+          metadata: selectedMetadataResolver
         }
 
-        const line = JSON.parse(rawString)
         const lineContainer = document.createElement('div')
         lineContainer.setAttribute('class', 'container')
 
