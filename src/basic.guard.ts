@@ -28,7 +28,7 @@ export class BasicAuthGuard implements CanActivate {
       throw new Error('보안에 취약한 패스코드입니다.');
     }
     this.trialBanThreshold = configService.get<number>('IP_BAN_THRESHOLD') - 1;
-    if (this.trialBanThreshold < 0) {
+    if (!this.trialBanThreshold || this.trialBanThreshold < 0) {
       throw new Error('차단 시도횟수는 0보다 커야합니다.');
     }
   }
@@ -37,7 +37,7 @@ export class BasicAuthGuard implements CanActivate {
     context: ExecutionContext,
   ): boolean | Promise<boolean> | Observable<boolean> {
     const request: Request = context.switchToHttp().getRequest<Request>();
-    const ip = request.ip;
+    const ip = request.headers['x-forwarded-for'] || request.socket.remoteAddress;
 
     this.deleteTrialDataIfExpired(ip, request);
 
